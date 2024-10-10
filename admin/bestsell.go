@@ -48,8 +48,10 @@ func BestSellings(c *gin.Context) {
 
 	for _, order := range orders {
 		for _, item := range order.Items {
-			productSalesMap[item.Product_Id] += item.Quantity
-			categorySalesMap[item.Product.Category_Id] += item.Quantity
+			if item.Status == "completed" {
+				productSalesMap[item.Product_Id] += item.Quantity
+				categorySalesMap[item.Product.Category_Id] += item.Quantity
+			}
 		}
 	}
 

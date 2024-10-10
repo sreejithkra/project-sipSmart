@@ -24,6 +24,22 @@ func CreaterazorpayOrder(c *gin.Context) {
 		return
 	}
 
+	address_id := c.Query("id")
+	var address models.Address
+
+	if address_id != "" {
+		if err := database.Db.Where("id = ? AND user_id = ?", address_id, user_id).First(&address).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "address not found"})
+			return
+		}
+	} else {
+
+		if err := database.Db.Where("\"default\" = ? AND user_id = ?", true, user_id).First(&address).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "address not found"})
+			return
+		}
+	}
+
 	var cart models.Cart
 	if err := database.Db.Where("user_id = ?", uint(user_id)).Preload("Items.Product").First(&cart).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Cart not found"})
@@ -51,7 +67,7 @@ func CreaterazorpayOrder(c *gin.Context) {
 	}
 
 	client := razorpay.NewClient("rzp_test_fc8qTH1YMOywRn", "l0EMEeYVmuB10wu9Up2g5Rls")
-	amount := int(cart.Discount_price * 100)
+	amount := int(cart.Final_Price * 100)
 	data := map[string]interface{}{
 		"amount":   amount,
 		"currency": "INR",
@@ -102,7 +118,7 @@ func PaymentCheck(c *gin.Context) {
 		order := models.Order{
 			User_Id:        cart.User_Id,
 			Total_Price:    cart.Total_Price,
-			Discount_price: cart.Discount_price,
+			Final_Price: cart.Final_Price,
 			Order_Status:   "Pending",
 			Payment_Status: "Confirmed",
 			Payment_Method: "Razorpay",
@@ -120,7 +136,7 @@ func PaymentCheck(c *gin.Context) {
 				Product_Id:     cart_item.Product_Id,
 				Quantity:       cart_item.Quantity,
 				Price:          cart_item.Price,
-				Discount_price: cart_item.Discount_price,
+				Offer_price: cart_item.Offer_Price,
 				Status:         "pending",
 			}
 
@@ -149,7 +165,7 @@ func PaymentCheck(c *gin.Context) {
 			Id:             int(order.ID),
 			User_Id:        order.User_Id,
 			Total_Price:    order.Total_Price,
-			Discount_price: order.Discount_price,
+			Discount_price: order.Final_Price,
 			Payment_Status: order.Payment_Status,
 			Order_Status:   "Pending",
 			Payment_Method: order.Payment_Method,
@@ -164,7 +180,7 @@ func PaymentCheck(c *gin.Context) {
 
 		cart.Total_Price = 0
 		cart.Coupon_code = ""
-		cart.Discount_price = 0
+		cart.Final_Price = 0
 
 		if err := database.Db.Save(&cart).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update product stock"})

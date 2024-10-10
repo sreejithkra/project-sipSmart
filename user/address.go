@@ -12,6 +12,36 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func Change_default_address(c *gin.Context) {
+	addressID := c.Param("id")
+
+	userID := helper.Get_Userid(c)
+	if userID == 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found from claims"})
+		return
+	}
+
+	var address models.Address
+	if err := database.Db.Where("id = ? AND user_id = ?", addressID, userID).First(&address).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Address not found or does not belong to the user"})
+		return
+	}
+
+	if err := database.Db.Model(&models.Address{}).Where("user_id = ? AND \"default\" = ?", userID, true).Update("default", false).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset the current default address"})
+		return
+	}
+
+	if err := database.Db.Model(&address).Update("default", true).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update the default address"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Default address changed successfully",
+	})
+}
+
 func List_address(c *gin.Context) {
 
 	user_id := helper.Get_Userid(c)

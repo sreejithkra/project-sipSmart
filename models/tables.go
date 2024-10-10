@@ -98,7 +98,7 @@ type Cart struct {
 	Items          []Cart_Item `json:"items"`
 	Total_Price    float32     `json:"total_price"`
 	Coupon_code    string      `json:"Coupon_code"`
-	Discount_price float32     `json:"discount_price"`
+	Final_Price float32     `json:"final_price"`
 
 	// Relation
 	User User `gorm:"foreignKey:User_Id;references:ID"`
@@ -110,7 +110,7 @@ type Cart_Item struct {
 	Product_Id     int     `json:"product_id" validate:"required"`
 	Quantity       int     `json:"quantity" validate:"required"`
 	Price          float32 `json:"price"`
-	Discount_price float32 `json:"discount_price"`
+	Offer_Price float32 `json:"offer_price"`
 
 	// Relation
 	Cart    Cart    `gorm:"foreignKey:Cart_Id;references:ID"`
@@ -125,11 +125,13 @@ type Order struct {
 	Payment_Status string       `json:"payment_status"`
 	Order_Status   string       `json:"order_status"`
 	Payment_Method string       `json:"payment_method"`
-	Discount_price float32      `json:"discount_price"`
+	Final_Price float32      `json:"final_price"`
 	Coupon_code    string
+	Address_Id     int
 
 	// Relation
-	User User `gorm:"foreignKey:User_Id;references:ID"`
+	User    User    `gorm:"foreignKey:User_Id;references:ID"`
+	Address Address `gorm:"foreignKey:Address_Id;references:ID"`
 }
 
 type Order_Item struct {
@@ -138,7 +140,7 @@ type Order_Item struct {
 	Product_Id     int     `json:"product_id"`
 	Quantity       int     `json:"quantity"`
 	Price          float32 `json:"price"`
-	Discount_price float32 `json:"discount_price"`
+	Offer_price float32 `json:"offer_price"`
 	Status         string  `json:"status"`
 
 	// Relation

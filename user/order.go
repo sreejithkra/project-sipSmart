@@ -19,6 +19,22 @@ func Create_Order(c *gin.Context) {
 		return
 	}
 
+	address_id := c.Query("id")
+	var address models.Address
+
+	if address_id != "" {
+		if err := database.Db.Where("id = ? AND user_id = ?", address_id, user_id).First(&address).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "address not found"})
+			return
+		}
+	} else {
+
+		if err := database.Db.Where("\"default\" = ? AND user_id = ?", true, user_id).First(&address).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "address not found"})
+			return
+		}
+	}
+
 	var cart models.Cart
 	if err := database.Db.Preload("Items.Product").Where("user_id = ?", user_id).First(&cart).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "item details not found"})
@@ -30,7 +46,7 @@ func Create_Order(c *gin.Context) {
 		return
 	}
 
-	if cart.Discount_price > 1500 {
+	if cart.Final_Price > 1500 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Order above Rs 1000 should not be allowed for COD"})
 		return
 	}
@@ -38,11 +54,12 @@ func Create_Order(c *gin.Context) {
 	order := models.Order{
 		User_Id:        cart.User_Id,
 		Total_Price:    cart.Total_Price,
-		Discount_price: cart.Discount_price,
+		Final_Price: cart.Final_Price,
 		Order_Status:   "Pending",
 		Payment_Status: "Pending",
 		Payment_Method: "COD",
 		Coupon_code:    cart.Coupon_code,
+		Address_Id:     int(address.ID),
 	}
 
 	for _, cart_item := range cart.Items {
@@ -50,7 +67,7 @@ func Create_Order(c *gin.Context) {
 			Product_Id:     cart_item.Product_Id,
 			Quantity:       cart_item.Quantity,
 			Price:          cart_item.Price,
-			Discount_price: cart_item.Discount_price,
+			Offer_price: cart_item.Offer_Price,
 			Status:         "pending",
 		}
 
@@ -91,7 +108,7 @@ func Create_Order(c *gin.Context) {
 			Product_Name:   item.Product.Name,
 			Quantity:       item.Quantity,
 			Price:          int(item.Price),
-			Discount_price: item.Discount_price,
+			Discount_price: item.Offer_price,
 			Status:         item.Status,
 		}
 		responseItems = append(responseItems, orderItem)
@@ -101,7 +118,7 @@ func Create_Order(c *gin.Context) {
 		Id:             int(order.ID),
 		User_Id:        order.User_Id,
 		Total_Price:    order.Total_Price,
-		Discount_price: order.Discount_price,
+		Discount_price: order.Final_Price,
 		Payment_Status: order.Payment_Status,
 		Order_Status:   order.Order_Status,
 		Payment_Method: order.Payment_Method,
@@ -117,7 +134,7 @@ func Create_Order(c *gin.Context) {
 
 	cart.Total_Price = 0
 	cart.Coupon_code = ""
-	cart.Discount_price = 0
+	cart.Final_Price = 0
 
 	if err := database.Db.Save(&cart).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update product stock"})
@@ -154,7 +171,7 @@ func List_Orders(c *gin.Context) {
 				Product_Name:   item.Product.Name,
 				Quantity:       item.Quantity,
 				Price:          int(item.Price),
-				Discount_price: item.Discount_price,
+				Discount_price: item.Offer_price,
 				Status:         item.Status,
 			}
 			responseItems = append(responseItems, orderItem)
@@ -165,7 +182,7 @@ func List_Orders(c *gin.Context) {
 			User_Id:        order.User_Id,
 			Items:          responseItems,
 			Total_Price:    order.Total_Price,
-			Discount_price: order.Discount_price,
+			Discount_price: order.Final_Price,
 			Payment_Status: order.Payment_Status,
 			Order_Status:   order.Order_Status,
 			Payment_Method: order.Payment_Method,
@@ -175,77 +192,6 @@ func List_Orders(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"orders": responseOrders})
 }
-
-// func Cancel_Order(c *gin.Context) {
-
-// 	user_id := helper.Get_Userid(c)
-// 	if user_id == 0 {
-// 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found"})
-// 		return
-// 	}
-
-// 	order_id := c.Param("id")
-
-// 	var order models.Order
-// 	if err := database.Db.Where("id = ? AND user_id = ?", order_id, user_id).First(&order).Error; err != nil {
-// 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
-// 		return
-// 	}
-
-// 	if order.Order_Status != "Pending" {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Only pending orders can be canceled"})
-// 		return
-// 	}
-
-// 	for _, item := range order.Items {
-// 		var product models.Product
-// 		if err := database.Db.Where("id = ?", item.Product_Id).First(&product).Error; err != nil {
-// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Product not found"})
-// 			return
-// 		}
-
-// 		product.Stock += item.Quantity
-// 		if err := database.Db.Save(&product).Error; err != nil {
-// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update product stock"})
-// 			return
-// 		}
-// 	}
-
-// 	order.Order_Status = "canceled"
-// 	if err := database.Db.Save(&order).Error; err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel order"})
-// 		return
-// 	}
-
-// 	if order.Payment_Status == "Confirmed" {
-
-// 		var wallet models.Wallet
-// 		if err := database.Db.Where("user_id = ?", order.User_Id).First(&wallet).Error; err != nil {
-
-// 			wallet = models.Wallet{User_Id: order.User_Id, Balance: 0}
-// 			if err := database.Db.Create(&wallet).Error; err != nil {
-// 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create wallet"})
-// 				return
-// 			}
-
-// 		}
-
-// 		wallet.Balance += order.Discount_price
-// 		c.JSON(http.StatusOK, gin.H{
-// 			"message": "refund processed",
-// 			"refund":  order.Discount_price,
-// 		})
-
-// 		if err := database.Db.Save(&wallet).Error; err != nil {
-// 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update wallet balance"})
-// 			return
-// 		}
-// 	}
-
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"message": "Order canceled successfully",
-// 	})
-// }
 
 func Cancel_Order(c *gin.Context) {
 
@@ -299,7 +245,7 @@ func Cancel_Order(c *gin.Context) {
 			}
 		}
 
-		wallet.Balance += order.Discount_price
+		wallet.Balance += order.Final_Price
 		if err := database.Db.Save(&wallet).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update wallet balance"})
 			return
@@ -307,7 +253,7 @@ func Cancel_Order(c *gin.Context) {
 
 		transaction := models.Transaction{
 			Wallet_Id: int(wallet.ID),
-			Amount:    order.Discount_price,
+			Amount:    order.Final_Price,
 			Type:      "credit",
 		}
 
@@ -318,7 +264,7 @@ func Cancel_Order(c *gin.Context) {
 
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Refund processed successfully",
-			"refund":  order.Discount_price,
+			"refund":  order.Final_Price,
 		})
 
 		return
@@ -380,8 +326,9 @@ func Cancel_Orderitem(c *gin.Context) {
 		return
 	}
 	var deduction_amount float32
+	var refund_amount float32
 
-	order.Total_Price -= (orderItem.Price * float32(orderItem.Quantity))
+	updated_total := order.Total_Price-(orderItem.Price * float32(orderItem.Quantity))
 
 	if order.Total_Price == 0 {
 		order.Order_Status = "canceled"
@@ -394,23 +341,29 @@ func Cancel_Orderitem(c *gin.Context) {
 			return
 		}
 
-		if order.Total_Price < float32(coupon.Min_Purchase) {
+		if updated_total < float32(coupon.Min_Purchase) {
 			for _, item := range order.Items {
-				item.Discount_price = item.Price
+				item.Offer_price = item.Price
 				database.Db.Save(&item)
 			}
-			deduction_amount = order.Discount_price - order.Total_Price
-			order.Discount_price = order.Total_Price
+			refund_amount = order.Final_Price - updated_total
+			order.Total_Price=updated_total
+			order.Final_Price = updated_total
 		} else {
-			deduction_amount = (orderItem.Discount_price * float32(orderItem.Quantity))
+			deduction_amount = (orderItem.Offer_price * float32(orderItem.Quantity))
+			order.Total_Price=updated_total
+			order.Final_Price -= deduction_amount
 
-			order.Discount_price -= deduction_amount
+			refund_amount=deduction_amount
 
 		}
 
 	} else {
-		deduction_amount = order.Discount_price - order.Total_Price
-		order.Discount_price = order.Total_Price
+		deduction_amount = order.Total_Price - updated_total
+		order.Total_Price = updated_total
+		order.Final_Price=updated_total
+
+		refund_amount=deduction_amount
 	}
 	database.Db.Save(&order)
 	if order.Payment_Status == "Confirmed" {
@@ -423,7 +376,7 @@ func Cancel_Orderitem(c *gin.Context) {
 				return
 			}
 		}
-		wallet.Balance += deduction_amount
+		wallet.Balance += refund_amount
 
 		if err := database.Db.Save(&wallet).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update wallet balance"})
@@ -432,7 +385,7 @@ func Cancel_Orderitem(c *gin.Context) {
 
 		transaction := models.Transaction{
 			Wallet_Id: int(wallet.ID),
-			Amount:    deduction_amount,
+			Amount:    refund_amount,
 			Type:      "credit",
 		}
 
@@ -443,7 +396,7 @@ func Cancel_Orderitem(c *gin.Context) {
 
 		c.JSON(http.StatusOK, gin.H{
 			"message":       "refund added to wallet",
-			"refund_amount": deduction_amount,
+			"refund_amount": refund_amount,
 		})
 	}
 

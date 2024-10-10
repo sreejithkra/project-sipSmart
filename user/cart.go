@@ -27,7 +27,7 @@ func Add_Tocart(c *gin.Context) {
 
 	var cart models.Cart
 	if err := database.Db.Where("user_id = ?", user_id).First(&cart).Error; err != nil {
-		cart = models.Cart{User_Id: user_id, Total_Price: 0, Discount_price: 0}
+		cart = models.Cart{User_Id: user_id, Total_Price: 0, Final_Price: 0}
 		database.Db.Create(&cart)
 	}
 
@@ -52,7 +52,7 @@ func Add_Tocart(c *gin.Context) {
 
 	cart_item.Cart_Id = int(cart.ID)
 	cart_item.Price = float32(product.Offer_Price)
-	cart_item.Discount_price = float32(product.Offer_Price)
+	cart_item.Offer_Price = float32(product.Offer_Price)
 
 	var existing_cart_item models.Cart_Item
 	if err := database.Db.Where("cart_id = ? AND product_id = ?", cart.ID, cart_item.Product_Id).First(&existing_cart_item).Error; err == nil {
@@ -71,7 +71,7 @@ func Add_Tocart(c *gin.Context) {
 	}
 	cart.Total_Price += cart_item.Price * float32(cart_item.Quantity)
 
-	cart.Discount_price = cart.Total_Price
+	cart.Final_Price = cart.Total_Price
 	database.Db.Save(&cart)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Item added to cart successfully"})
@@ -93,7 +93,7 @@ func List_Cartitems(c *gin.Context) {
 	var cartResponse responsemodels.Cart
 	cartResponse.ID = int(cart.ID)
 	cartResponse.TotalPrice = cart.Total_Price
-	cartResponse.Discount_price = cart.Discount_price
+	cartResponse.Discount_price = cart.Final_Price
 
 	for _, item := range cart.Items {
 		cartItemResponse := responsemodels.Cart_Item{
@@ -101,7 +101,7 @@ func List_Cartitems(c *gin.Context) {
 			Product_Name:   item.Product.Name,
 			Quantity:       item.Quantity,
 			Price:          item.Price,
-			Discount_price: item.Discount_price,
+			Discount_price: item.Offer_Price,
 		}
 		cartResponse.Items = append(cartResponse.Items, cartItemResponse)
 	}
@@ -156,16 +156,16 @@ func Remove_Fromcart(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"message": "No coupons found"})
 		}
 		if cart.Total_Price < float32(coupon.Min_Purchase) {
-			cart_item.Discount_price = cart_item.Price
+			cart_item.Offer_Price = cart_item.Price
 			database.Db.Save(&cart_item)
-			cart.Discount_price = float32(cart.Total_Price)
+			cart.Final_Price = float32(cart.Total_Price)
 			cart.Coupon_code = ""
 			c.JSON(http.StatusOK, gin.H{"message": "offer coupon removed"})
 		} else {
-			cart.Discount_price -= (cart_item.Discount_price * float32(quantity))
+			cart.Final_Price -= (cart_item.Offer_Price * float32(quantity))
 		}
 	} else {
-		cart.Discount_price = float32(cart.Total_Price)
+		cart.Final_Price = float32(cart.Total_Price)
 	}
 
 	database.Db.Save(&cart)

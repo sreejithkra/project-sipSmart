@@ -67,7 +67,7 @@ func Sales_Report(c *gin.Context) {
 	maxQuantitySold := 0
 
 	for _, order := range orders {
-		totalSales += float64(order.Discount_price)
+		totalSales += float64(order.Final_Price)
 		for _, item := range order.Items {
 			productSalesMap[item.Product_Id] += item.Quantity
 			if productSalesMap[item.Product_Id] > maxQuantitySold {
@@ -87,7 +87,7 @@ func Sales_Report(c *gin.Context) {
 				Product_Name:   item.Product.Name,
 				Quantity:       item.Quantity,
 				Price:          int(item.Product.Offer_Price),
-				Discount_price: item.Discount_price,
+				Discount_price: item.Offer_price,
 				Status:         item.Status,
 			}
 			responseItems = append(responseItems, orderItem)
@@ -98,7 +98,7 @@ func Sales_Report(c *gin.Context) {
 			User_Id:        order.User_Id,
 			Items:          responseItems,
 			Total_Price:    order.Total_Price,
-			Discount_price: order.Discount_price,
+			Discount_price: order.Final_Price,
 			Order_Status:   order.Order_Status,
 			Payment_Status: order.Payment_Status,
 			Payment_Method: order.Payment_Method,
@@ -172,12 +172,15 @@ func Salespdf(c *gin.Context) {
 	}
 
 	var totalSales float64
+	var actualSales float64
 	productSalesMap := make(map[int]int)
 	var bestSellingProductID int
 	maxQuantitySold := 0
 
 	for _, order := range orders {
-		totalSales += float64(order.Discount_price)
+		actualSales += float64(order.Final_Price)
+		totalSales += float64(order.Total_Price)
+
 		for _, item := range order.Items {
 			productSalesMap[item.Product_Id] += item.Quantity
 			if productSalesMap[item.Product_Id] > maxQuantitySold {
@@ -192,7 +195,14 @@ func Salespdf(c *gin.Context) {
 		database.Db.First(&bestSellingProduct, bestSellingProductID)
 	}
 
-	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf := fpdf.NewCustom(&fpdf.InitType{
+		OrientationStr: "P",
+		UnitStr:        "mm",
+		Size: fpdf.SizeType{
+			Wd: 230, // A4 width
+			Ht: 350, // Custom height
+		},
+	})
 	pdf.AddPage()
 
 	pdf.SetFont("Arial", "B", 16)
@@ -200,6 +210,8 @@ func Salespdf(c *gin.Context) {
 	pdf.Ln(10)
 
 	pdf.SetFont("Arial", "", 12)
+	pdf.Cell(40, 10, fmt.Sprintf("Company Name: %s", "Sip Smart"))
+	pdf.Ln(7)
 	pdf.Cell(40, 10, fmt.Sprintf("Report Type: %s", reportType))
 	pdf.Ln(7)
 	pdf.Cell(40, 10, fmt.Sprintf("Start Date: %s", startDate.Format("2006-01-02")))
@@ -207,6 +219,10 @@ func Salespdf(c *gin.Context) {
 	pdf.Cell(40, 10, fmt.Sprintf("End Date: %s", endDate.Format("2006-01-02")))
 	pdf.Ln(7)
 	pdf.Cell(40, 10, fmt.Sprintf("Total Sales: %.2f Rs", totalSales))
+	pdf.Ln(7)
+	pdf.Cell(40, 10, fmt.Sprintf("Total Discount: %.2f Rs", totalSales-actualSales))
+	pdf.Ln(7)
+	pdf.Cell(40, 10, fmt.Sprintf("Actual Sales: %.2f Rs", actualSales))
 	pdf.Ln(7)
 	pdf.Cell(40, 10, fmt.Sprintf("Total Sales Count: %d", salesCount))
 	pdf.Ln(7)
@@ -220,7 +236,8 @@ func Salespdf(c *gin.Context) {
 	pdf.SetFont("Arial", "B", 10)
 	pdf.CellFormat(20, 7, "Order ID", "1", 0, "C", false, 0, "")
 	pdf.CellFormat(20, 7, "User ID", "1", 0, "C", false, 0, "")
-	// pdf.CellFormat(30, 7, "Total Price (Rs)", "1", 0, "C", false, 0, "")
+
+	pdf.CellFormat(30, 7, "Total Price", "1", 0, "C", false, 0, "")
 	pdf.CellFormat(30, 7, "Final Price (Rs)", "1", 0, "C", false, 0, "")
 
 	pdf.CellFormat(60, 7, "Product", "1", 0, "C", false, 0, "")
@@ -234,9 +251,8 @@ func Salespdf(c *gin.Context) {
 			item := order.Items[0]
 			pdf.CellFormat(20, 7, fmt.Sprintf("%d", order.ID), "1", 0, "C", false, 0, "")
 			pdf.CellFormat(20, 7, fmt.Sprintf("%d", order.User_Id), "1", 0, "C", false, 0, "")
-			// pdf.CellFormat(30, 7, fmt.Sprintf("%.2f", order.Total_Price), "1", 0, "C", false, 0, "")
-			pdf.CellFormat(30, 7, fmt.Sprintf("%.2f", order.Discount_price), "1", 0, "C", false, 0, "")
-
+			pdf.CellFormat(30, 7, fmt.Sprintf("%.2f", order.Total_Price), "1", 0, "C", false, 0, "")
+			pdf.CellFormat(30, 7, fmt.Sprintf("%.2f", order.Final_Price), "1", 0, "C", false, 0, "")
 			pdf.CellFormat(60, 7, item.Product.Name, "1", 0, "C", false, 0, "")
 			pdf.CellFormat(20, 7, fmt.Sprintf("%d", item.Quantity), "1", 0, "C", false, 0, "")
 			pdf.CellFormat(30, 7, fmt.Sprintf("%.2f", item.Product.Offer_Price), "1", 0, "C", false, 0, "")
@@ -245,11 +261,13 @@ func Salespdf(c *gin.Context) {
 
 		for i := 1; i < len(order.Items); i++ {
 			item := order.Items[i]
-			pdf.CellFormat(70, 7, "", "0", 0, "", false, 0, "")
-			pdf.CellFormat(60, 7, item.Product.Name, "1", 0, "C", false, 0, "")
-			pdf.CellFormat(20, 7, fmt.Sprintf("%d", item.Quantity), "1", 0, "C", false, 0, "")
-			pdf.CellFormat(30, 7, fmt.Sprintf("%.2f", item.Product.Offer_Price), "1", 0, "C", false, 0, "")
-			pdf.Ln(7)
+			if item.Status == "completed" {
+				pdf.CellFormat(100, 7, "", "0", 0, "", false, 0, "")
+				pdf.CellFormat(60, 7, item.Product.Name, "1", 0, "C", false, 0, "")
+				pdf.CellFormat(20, 7, fmt.Sprintf("%d", item.Quantity), "1", 0, "C", false, 0, "")
+				pdf.CellFormat(30, 7, fmt.Sprintf("%.2f", item.Product.Offer_Price), "1", 0, "C", false, 0, "")
+				pdf.Ln(7)
+			}
 		}
 
 		pdf.Ln(5)
@@ -331,7 +349,7 @@ func SalesExcel(c *gin.Context) {
 	maxQuantitySold := 0
 
 	for _, order := range orders {
-		totalSales += float64(order.Discount_price)
+		totalSales += float64(order.Final_Price)
 		for _, item := range order.Items {
 			productSalesMap[item.Product_Id] += item.Quantity
 			if productSalesMap[item.Product_Id] > maxQuantitySold {
@@ -376,7 +394,7 @@ func SalesExcel(c *gin.Context) {
 			f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), order.ID)
 			f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), order.User_Id)
 			f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), order.Total_Price)
-			f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), order.Discount_price)
+			f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), order.Final_Price)
 			f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), item.Product.Name)
 			f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), item.Quantity)
 			f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), item.Product.Offer_Price)

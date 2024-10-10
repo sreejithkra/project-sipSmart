@@ -8,6 +8,7 @@ import (
 	"sip_Smart/responsemodels"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func User_Profile(c *gin.Context) {
@@ -116,7 +117,9 @@ func Get_Wallet(c *gin.Context) {
 	}
 
 	var wallet models.Wallet
-	if err := database.Db.Preload("Transactions").Where("user_id = ?", user_id).First(&wallet).Error; err != nil {
+	if err := database.Db.Preload("Transactions", func(db *gorm.DB) *gorm.DB {
+		return db.Order("updated_at DESC")
+	}).Where("user_id = ?", user_id).First(&wallet).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Wallet not found"})
 		return
 	}

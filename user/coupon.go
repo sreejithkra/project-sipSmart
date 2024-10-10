@@ -54,7 +54,7 @@ func Apply_Coupon(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": fmt.Sprintf("This coupon requires a minimum purchase amount of %d", coupon.Min_Purchase),
 		})
-		cart.Discount_price = float32(cart.Total_Price)
+		cart.Final_Price = float32(cart.Total_Price)
 		return
 	}
 
@@ -63,11 +63,11 @@ func Apply_Coupon(c *gin.Context) {
 		discountAmount = (float32(coupon.Max_Discount))
 	}
 
-	cart.Discount_price = float32(cart.Total_Price) - float32(discountAmount)
+	cart.Final_Price = float32(cart.Total_Price) - float32(discountAmount)
 	cart.Coupon_code = coupon.Code
 
 	for _, cart_item := range cart.Items {
-		cart_item.Discount_price = cart_item.Price - ((cart_item.Price / cart.Total_Price) * discountAmount)
+		cart_item.Offer_Price = cart_item.Price - ((cart_item.Price / cart.Total_Price) * discountAmount)
 		if err := database.Db.Save(&cart_item).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cart"})
 			return
@@ -82,7 +82,7 @@ func Apply_Coupon(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message":         "Coupon applied successfully",
 		"discount_amount": discountAmount,
-		"final_price":     cart.Discount_price,
+		"final_price":     cart.Final_Price,
 	})
 }
 
@@ -111,10 +111,10 @@ func Remove_Coupon(c *gin.Context) {
 	}
 
 	cart.Coupon_code = ""
-	cart.Discount_price = cart.Total_Price
+	cart.Final_Price = cart.Total_Price
 
 	for _, cart_item := range cart.Items {
-		cart_item.Discount_price = cart_item.Price
+		cart_item.Offer_Price = cart_item.Price
 		if err := database.Db.Save(&cart_item).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update cart"})
 			return
@@ -128,6 +128,6 @@ func Remove_Coupon(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":       "Coupon removed successfully",
-		"updated_price": cart.Discount_price,
+		"updated_price": cart.Final_Price,
 	})
 }

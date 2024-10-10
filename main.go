@@ -76,6 +76,8 @@ func main() {
 		authuser.GET("/list_address", user.List_address)
 		authuser.POST("/add_address", user.Add_address)
 		authuser.PUT("/edit_address/:id", user.Edit_address)
+		authuser.PUT("/change_default_address/:id", user.Change_default_address)
+
 		authuser.DELETE("/delete_address/:id", user.Delete_address)
 
 		authuser.POST("/add_tocart", user.Add_Tocart)

@@ -69,18 +69,18 @@ func GenerateInvoicePDF(c *gin.Context) {
 	pdf.Cell(30, 10, fmt.Sprintf("$%.2f", order.Total_Price))
 	pdf.Ln(8)
 
-	if order.Discount_price > 0 {
+	if order.Final_Price > 0 {
 		pdf.Cell(60, 10, "Discount:")
 		pdf.Cell(30, 10, "")
 		pdf.Cell(30, 10, "")
-		pdf.Cell(30, 10, fmt.Sprintf("-$%.2f", order.Total_Price-order.Discount_price))
+		pdf.Cell(30, 10, fmt.Sprintf("-$%.2f", order.Total_Price-order.Final_Price))
 		pdf.Ln(8)
 	}
 
 	pdf.Cell(60, 10, "Grand Total:")
 	pdf.Cell(30, 10, "")
 	pdf.Cell(30, 10, "")
-	pdf.Cell(30, 10, fmt.Sprintf("$%.2f", order.Discount_price))
+	pdf.Cell(30, 10, fmt.Sprintf("$%.2f", order.Final_Price))
 
 	c.Header("Content-Type", "application/pdf")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=invoice_%d.pdf", order.ID))

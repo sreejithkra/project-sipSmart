@@ -29,7 +29,7 @@ func Admin_ListOrders(c *gin.Context) {
 				Product_Name:   item.Product.Name,
 				Quantity:       item.Quantity,
 				Price:          int(item.Price),
-				Discount_price: item.Discount_price,
+				Discount_price: item.Offer_price,
 				Status:         item.Status,
 			}
 			responseItems = append(responseItems, orderItem)
@@ -43,7 +43,7 @@ func Admin_ListOrders(c *gin.Context) {
 			Order_Status:   order.Order_Status,
 			Payment_Status: order.Payment_Status,
 			Payment_Method: order.Payment_Method,
-			Discount_price: order.Discount_price,
+			Discount_price: order.Final_Price,
 		}
 		responseOrders = append(responseOrders, responseOrder)
 	}
@@ -194,8 +194,10 @@ func Return_item(c *gin.Context) {
 		}
 	}
 	var deduction_amount float32
+	var refund_amount float32
 
-	order.Total_Price -= (orderItem.Price * float32(orderItem.Quantity))
+
+	updated_total := order.Total_Price - (orderItem.Price * float32(orderItem.Quantity))
 
 	if order.Coupon_code != "" {
 		var coupon models.Coupon
@@ -204,26 +206,33 @@ func Return_item(c *gin.Context) {
 			return
 		}
 
-		if order.Total_Price < float32(coupon.Min_Purchase) {
+		if updated_total < float32(coupon.Min_Purchase) {
 			for _, item := range order.Items {
-				item.Discount_price = item.Price
+				item.Offer_price = item.Price
 				database.Db.Save(&item)
 			}
-			deduction_amount = order.Discount_price - order.Total_Price
-			order.Discount_price = order.Total_Price
+			deduction_amount = order.Final_Price - updated_total
+			order.Total_Price = updated_total
+			order.Final_Price = updated_total
+
+			refund_amount=deduction_amount
 		} else {
-			deduction_amount = (orderItem.Discount_price * float32(orderItem.Quantity))
+			deduction_amount = (orderItem.Offer_price * float32(orderItem.Quantity))
+			order.Total_Price = updated_total
+			order.Final_Price -= deduction_amount
 
-			order.Discount_price -= deduction_amount
-
+			refund_amount=deduction_amount
 		}
 	} else {
-		deduction_amount = order.Discount_price - order.Total_Price
-		order.Discount_price = order.Total_Price
+		deduction_amount = order.Total_Price - updated_total
+		order.Total_Price = updated_total
+		order.Final_Price=updated_total
+
+		refund_amount=deduction_amount
 	}
 	database.Db.Save(&order)
 
-	wallet.Balance += deduction_amount
+	wallet.Balance += refund_amount
 
 	if err := database.Db.Save(&wallet).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update wallet balance"})
@@ -232,7 +241,7 @@ func Return_item(c *gin.Context) {
 
 	transaction := models.Transaction{
 		Wallet_Id: int(wallet.ID),
-		Amount:    deduction_amount,
+		Amount:    refund_amount,
 		Type:      "credit",
 	}
 
