@@ -24,22 +24,6 @@ func CreaterazorpayOrder(c *gin.Context) {
 		return
 	}
 
-	address_id := c.Query("id")
-	var address models.Address
-
-	if address_id != "" {
-		if err := database.Db.Where("id = ? AND user_id = ?", address_id, user_id).First(&address).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "address not found"})
-			return
-		}
-	} else {
-
-		if err := database.Db.Where("\"default\" = ? AND user_id = ?", true, user_id).First(&address).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "address not found"})
-			return
-		}
-	}
-
 	var cart models.Cart
 	if err := database.Db.Where("user_id = ?", uint(user_id)).Preload("Items.Product").First(&cart).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Cart not found"})
@@ -115,14 +99,22 @@ func PaymentCheck(c *gin.Context) {
 			return
 		}
 
+		var address models.Address
+
+		if err := database.Db.Where("\"default\" = ? AND user_id = ?", true, user_id).First(&address).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "address not found"})
+			return
+		}
+
 		order := models.Order{
 			User_Id:        cart.User_Id,
 			Total_Price:    cart.Total_Price,
-			Final_Price: cart.Final_Price,
+			Final_Price:    cart.Final_Price,
 			Order_Status:   "Pending",
 			Payment_Status: "Confirmed",
 			Payment_Method: "Razorpay",
 			Coupon_code:    cart.Coupon_code,
+			Address_Id:     int(address.ID),
 		}
 
 		if err := database.Db.Create(&order).Error; err != nil {
@@ -132,12 +124,12 @@ func PaymentCheck(c *gin.Context) {
 
 		for _, cart_item := range cart.Items {
 			order_item := models.Order_Item{
-				Order_Id:       int(order.ID),
-				Product_Id:     cart_item.Product_Id,
-				Quantity:       cart_item.Quantity,
-				Price:          cart_item.Price,
+				Order_Id:    int(order.ID),
+				Product_Id:  cart_item.Product_Id,
+				Quantity:    cart_item.Quantity,
+				Price:       cart_item.Price,
 				Offer_price: cart_item.Offer_Price,
-				Status:         "pending",
+				Status:      "pending",
 			}
 
 			if err := database.Db.Create(&order_item).Error; err != nil {
